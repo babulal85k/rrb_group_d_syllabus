@@ -60,6 +60,9 @@
             text-decoration: line-through;
             color: #9ca3af;
         }
+        #save-confirm {
+            transition: opacity 0.5s ease-out;
+        }
     </style>
 </head>
 <body class="antialiased">
@@ -105,13 +108,18 @@
             <section id="detailed-syllabus" class="mb-12">
                 <h2 class="text-2xl font-semibold text-center mb-6 text-teal-700">Detailed Syllabus Explorer</h2>
                 <p class="text-center max-w-3xl mx-auto text-gray-600 mb-8">
-                    Dive deeper into the specific topics covered under each subject. Use the tabs below to navigate between subjects and see the complete list of topics you need to prepare for. This allows you to focus your study on one area at a time.
+                    Track your progress by marking topics as "Done". Your progress is saved automatically in your browser. Use the buttons below to save manually or reset your progress.
                 </p>
                 <div id="tabs-container" class="mb-6 flex flex-wrap justify-center gap-2 sm:gap-4 border-b border-gray-200 pb-4">
                     <button data-tab="mathematics" class="tab-button px-4 py-2 text-sm sm:text-base font-medium text-gray-600 border-b-2 border-transparent hover:border-teal-500 hover:text-teal-600 transition-all duration-300 rounded-t-md active-tab">Mathematics</button>
                     <button data-tab="reasoning" class="tab-button px-4 py-2 text-sm sm:text-base font-medium text-gray-600 border-b-2 border-transparent hover:border-teal-500 hover:text-teal-600 transition-all duration-300 rounded-t-md">General Intelligence & Reasoning</button>
                     <button data-tab="science" class="tab-button px-4 py-2 text-sm sm:text-base font-medium text-gray-600 border-b-2 border-transparent hover:border-teal-500 hover:text-teal-600 transition-all duration-300 rounded-t-md">General Science</button>
                     <button data-tab="awareness" class="tab-button px-4 py-2 text-sm sm:text-base font-medium text-gray-600 border-b-2 border-transparent hover:border-teal-500 hover:text-teal-600 transition-all duration-300 rounded-t-md">General Awareness & Current Affairs</button>
+                </div>
+                 <div class="flex justify-center items-center gap-4 mb-6">
+                    <button id="save-progress-btn" class="bg-blue-600 text-white font-bold py-2 px-5 rounded-lg hover:bg-blue-700 transition-colors duration-300">Save Progress</button>
+                    <button id="reset-progress-btn" class="bg-red-600 text-white font-bold py-2 px-5 rounded-lg hover:bg-red-700 transition-colors duration-300">Reset All</button>
+                    <span id="save-confirm" class="text-green-600 font-medium opacity-0">Progress Saved!</span>
                 </div>
                 
                 <div id="tabs-content" class="bg-white p-6 sm:p-8 rounded-xl shadow-lg border border-gray-200 min-h-[300px]">
@@ -171,11 +179,49 @@
                 }
             };
             
-            const progressState = {};
+            let progressState = {};
+            const storageKey = 'rrbSyllabusProgress';
+
+            function saveProgress() {
+                localStorage.setItem(storageKey, JSON.stringify(progressState));
+                const saveConfirm = document.getElementById('save-confirm');
+                saveConfirm.classList.remove('opacity-0');
+                setTimeout(() => {
+                    saveConfirm.classList.add('opacity-0');
+                }, 2000);
+            }
+
+            function loadProgress() {
+                const savedProgress = localStorage.getItem(storageKey);
+                if (savedProgress) {
+                    progressState = JSON.parse(savedProgress);
+                } else {
+                    // Initialize if no saved data
+                    Object.keys(syllabusData.topics).forEach(subject => {
+                        progressState[subject] = {};
+                        syllabusData.topics[subject].forEach(topic => {
+                            progressState[subject][topic] = false;
+                        });
+                    });
+                }
+            }
+
+            function resetProgress() {
+                Object.keys(progressState).forEach(subject => {
+                    Object.keys(progressState[subject]).forEach(topic => {
+                        progressState[subject][topic] = false;
+                    });
+                });
+                saveProgress();
+                // Re-render all topics
+                Object.keys(syllabusData.topics).forEach(subject => {
+                    renderTopics(subject);
+                });
+            }
 
             const updateProgress = (subject) => {
-                const subjectProgress = progressState[subject];
-                const totalTopics = Object.keys(subjectProgress).length;
+                const subjectProgress = progressState[subject] || {};
+                const totalTopics = syllabusData.topics[subject].length;
                 const completedTopics = Object.values(subjectProgress).filter(Boolean).length;
                 const percentage = totalTopics > 0 ? (completedTopics / totalTopics) * 100 : 0;
 
@@ -191,8 +237,7 @@
             const renderTopics = (subject) => {
                 const container = document.getElementById(subject);
                 const topicList = syllabusData.topics[subject];
-                progressState[subject] = {};
-
+               
                 let progressHTML = `
                     <div class="mb-6">
                         <div class="flex justify-between items-center mb-2">
@@ -209,22 +254,34 @@
                 topicHTML += '<ul class="space-y-3 text-gray-700">';
 
                 topicList.forEach(topic => {
-                    progressState[subject][topic] = false; // Initialize progress state
+                    const isCompleted = progressState[subject] && progressState[subject][topic];
+                    const completedClass = isCompleted ? 'completed' : '';
+                    const buttonText = isCompleted ? '✓ Completed' : 'Done';
+                    const buttonClasses = isCompleted 
+                        ? 'bg-green-600 text-white' 
+                        : 'text-teal-700 bg-teal-100 hover:bg-teal-200';
+                    const buttonDisabled = isCompleted ? 'disabled' : '';
+
                     topicHTML += `
-                    <li class="topic-item flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+                    <li class="topic-item ${completedClass} flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
                         <span class="topic-text flex-grow mr-4">${topic}</span>
-                        <button data-subject="${subject}" data-topic="${topic}" class="done-btn flex-shrink-0 text-xs font-bold text-teal-700 bg-teal-100 hover:bg-teal-200 px-3 py-1 rounded-full transition-colors duration-200">Done</button>
+                        <button data-subject="${subject}" data-topic="${topic}" class="done-btn flex-shrink-0 text-xs font-bold px-3 py-1 rounded-full transition-colors duration-200 ${buttonClasses}" ${buttonDisabled}>${buttonText}</button>
                     </li>`;
                 });
                 topicHTML += '</ul>';
                 container.innerHTML = progressHTML + topicHTML;
                 updateProgress(subject);
             };
+            
+            function initializeApp() {
+                loadProgress();
+                Object.keys(syllabusData.topics).forEach(subject => {
+                    renderTopics(subject);
+                });
+            }
 
-            renderTopics('mathematics');
-            renderTopics('reasoning');
-            renderTopics('science');
-            renderTopics('awareness');
+            initializeApp();
+
 
             const tabsContainer = document.getElementById('tabs-container');
             const tabButtons = tabsContainer.querySelectorAll('.tab-button');
@@ -244,28 +301,28 @@
             });
 
             tabsContent.addEventListener('click', (e) => {
-                if (e.target.matches('.done-btn')) {
+                if (e.target.matches('.done-btn') && !e.target.disabled) {
                     const button = e.target;
                     const subject = button.dataset.subject;
                     const topic = button.dataset.topic;
 
-                    // Toggle completion state
-                    const isCompleted = !progressState[subject][topic];
-                    progressState[subject][topic] = isCompleted;
+                    progressState[subject][topic] = true;
                     
                     const topicItem = button.closest('.topic-item');
-
-                    if (isCompleted) {
-                        topicItem.classList.add('completed');
-                        button.textContent = '✓ Completed';
-                        button.classList.remove('bg-teal-100', 'hover:bg-teal-200', 'text-teal-700');
-                        button.classList.add('bg-green-600', 'text-white');
-                        button.disabled = true;
-                    } 
+                    topicItem.classList.add('completed');
+                    button.textContent = '✓ Completed';
+                    button.classList.remove('bg-teal-100', 'hover:bg-teal-200', 'text-teal-700');
+                    button.classList.add('bg-green-600', 'text-white');
+                    button.disabled = true;
                     
                     updateProgress(subject);
+                    saveProgress(); // Auto-save on change
                 }
             });
+
+            document.getElementById('save-progress-btn').addEventListener('click', saveProgress);
+            document.getElementById('reset-progress-btn').addEventListener('click', resetProgress);
+
 
             const ctx = document.getElementById('syllabusChart').getContext('2d');
             new Chart(ctx, {
